@@ -8,8 +8,8 @@ CFLAGS+=-std=gnu17 -Wall -Wextra -pedantic -g -O3 #-Werror
 #LFLAGS+=-lpthread
 LDFLAGS+=-static
 
-SENDER_SOURCES+=file_sender.c
-RECEIVE_SOURCES+=file_receiver.c
+SENDER_SOURCES+=sender.c
+RECEIVE_SOURCES+=receiver.c
 SENDER_TARGET+=send.bin
 RECEIVE_TARGET+=rec.bin
 
