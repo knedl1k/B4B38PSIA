@@ -1,5 +1,5 @@
-#GNU General Public License v3.0
-#@knedl1k
+# GNU General Public License v3.0
+# @knedl1k
 
 .PHONY: all
 
