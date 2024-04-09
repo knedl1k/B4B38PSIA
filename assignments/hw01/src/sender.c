@@ -68,20 +68,11 @@ int main(int argc, char *argv[]){
     server_addr.sin_port=htons(server_port);
     if (inet_aton(server_ip, &server_addr.sin_addr) == 0)
         error("Invalid server IP address");
-
-
-
+    
     myPacket_t packet;
     packet.type=3;
     packet.crc=0;
     memset(packet.dataPacket.data, 0, sizeof(packet.dataPacket.data));
-     /*
-    SEND(sockfd, (char*)(&packet), sizeof(myPacket_t),server_addr);
-
-
-    char send_buffer[PACKET_MAX_LEN];
-    */
-
 
     //TODO THIS SECTION MUST BE CHANGED TO ME MORE UNIVERSAL
     myPacket_t packet2={.type=0, .crc=0, .dataPacket.data=*filename};
@@ -91,7 +82,12 @@ int main(int argc, char *argv[]){
     //sprintf(send_buffer, "SIZE=%ld\n", ftell(file));
     packet2.type=1;
     packet2.crc=0;
-    sprintf(packet2.dataPacket.data, "%ld",ftell(file));
+
+    fseek(file, 0L, SEEK_END);
+    printf(">>%d\n",ftell(file));
+    printf(">%d\n",htonl(ftell(file)));
+    sprintf(packet2.dataPacket.data, "%ld",htonl(ftell(file)));
+    fseek(file, 0L, SEEK_SET);
     //printf("%s\n",packet2.dataPacket.data);
     sendto(sockfd, (char*)&packet2, sizeof(myPacket_t), 0, (struct sockaddr *)&server_addr, sizeof(server_addr));
 
@@ -107,7 +103,7 @@ int main(int argc, char *argv[]){
          fread(packet.dataPacket.data, PACKET_MAX_LEN-4, 1, file);
          sendto(sockfd, (char*) &packet, sizeof(myPacket_t), 0, (struct sockaddr *)&server_addr, sizeof(server_addr));
          //printf("%s\n",packet.dataPacket.data);
-         sleep(2);
+         //sleep(2);
     }
 
 

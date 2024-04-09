@@ -66,22 +66,22 @@ int main(int argc, char *argv[]){
     int start_received = 0;
     uint32_t file_size = 0;
 
-while (! stop_received){
-    ssize_t recv_len=recvfrom(sockfd, &packet, sizeof(myPacket_t), 0, (struct sockaddr *)&client_addr, &client_len);
+while (! stop_received) {
+    ssize_t recv_len = recvfrom(sockfd, &packet, sizeof(myPacket_t), 0, (struct sockaddr *) &client_addr, &client_len);
     if (recv_len < 0)
         error("Error receiving data");
-    if(packet.type==0){
-        file=fopen(packet.dataPacket.data,"w");
-    }
-    if (packet.type == 1){ // Assuming type 1 is for file size
-        if (!start_received)
-            error("Received file size before start signal");
-
+    if (packet.type == 0) {
+        file = fopen(packet.dataPacket.data, "w");
+    }else if (packet.type == 1){ // Assuming type 1 is for file size
+        /*
         if (recv_len < sizeof(uint32_t))
             error("Received packet is too small for file size");
-
+        */
         memcpy(&file_size, packet.dataPacket.data, sizeof(uint32_t));
+        printf(">>  %d\n",file_size);
         file_size = ntohl(file_size); // Convert from network byte order to host byte order
+        printf(">%d\n",file_size);
+
     } else if (packet.type == 2){ // Assuming type 2 is for START
         start_received = 1;
     } else if (packet.type == 3) { // Assuming type 3 is for data
@@ -89,11 +89,12 @@ while (! stop_received){
             error("Received data before start signal");
 
         fwrite(packet.dataPacket.data, 1, recv_len - sizeof(short) * 2, file);
-    } else if (packet.type == 9){
+    } else if (packet.type == 9){ //END
         stop_received = 1;
         break;
     }
     else {
+        printf("%d %s\n",packet.type, packet.dataPacket.data);
         error("Received unexpected instruction!\n");
     }
 }
@@ -105,5 +106,5 @@ while (! stop_received){
 
 void error(const char *msg){
     perror(msg);
-    exit(1);
+    exit(2);
 }
