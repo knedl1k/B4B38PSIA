@@ -1,5 +1,5 @@
 // GNU General Public License v3.0
-// @knedl1k
+// @knedl1k & @
 /*
  * File sender
  *
@@ -13,27 +13,20 @@
 #include <arpa/inet.h>
 #include <stdbool.h>
 
-#define PACKET_MAX_LEN 1024
-#define SEND(sockfd,send_buffer,len,server_addr) (sendto(sockfd, send_buffer, len, 0, (struct sockaddr *)&server_addr, sizeof(server_addr)))
+#include "packets.h"
 
-typedef struct{
-    unsigned char data[PACKET_MAX_LEN-4];
-}myDataPacket_t;
-
-typedef struct{
-    short type;
-    short crc;
-    union{
-        myDataPacket_t dataPacket;
-    };
-}myPacket_t;
-
+#define SEND(sockfd,send_buffer,len,server_addr) \
+                (sendto(sockfd, send_buffer, len, 0, (struct sockaddr *)&server_addr, sizeof(server_addr)))
 
 void error(const char *msg);
+FILE* fileOpen(char *fn);
+void socksInit(struct sockaddr_in *server_addr, const char* server_ip, const int server_port,
+                struct sockaddr_in *client_addr, const int client_port, const int sockfd);
+void sendHeader(char *filename, int sockfd, struct sockaddr_in server_addr);
 
 
 int main(int argc, char *argv[]){
-    if (argc < 5){
+    if(argc < 5){
         fprintf(stderr,"Usage: %s <server_ip> <server_port> <filename> <client_port>\n", argv[0]);
         exit(1);
     }
@@ -43,85 +36,81 @@ int main(int argc, char *argv[]){
     char *filename=argv[3];
     const int client_port=atoi(argv[4]);
 
-    FILE *file=fopen(filename, "rb");
-    if (file == NULL)
-        error("Error opening file");
-
-    int sockfd;
-    struct sockaddr_in server_addr, client_addr;
-    socklen_t client_len=sizeof(client_addr);
-
-    sockfd=socket(AF_INET, SOCK_DGRAM, 0);
+    int sockfd=socket(AF_INET, SOCK_DGRAM, 0);
     if (sockfd < 0)
         error("Error opening socket");
 
-    memset(&client_addr, '\0', sizeof(client_addr));
-    client_addr.sin_family=AF_INET;
-    client_addr.sin_addr.s_addr=INADDR_ANY;
-    client_addr.sin_port=htons(client_port);
+    struct sockaddr_in server_addr, client_addr;
+    socksInit(&server_addr, server_ip, server_port, &client_addr, client_port, sockfd);
 
-    if (bind(sockfd, (struct sockaddr *) &client_addr, sizeof(client_addr)) < 0)
-        error("Error on binding");
+    FILE *fd=fileOpen(filename);
 
-    memset(&server_addr, '\0', sizeof(server_addr));
-    server_addr.sin_family=AF_INET;
-    server_addr.sin_port=htons(server_port);
-    if (inet_aton(server_ip, &server_addr.sin_addr) == 0)
-        error("Invalid server IP address");
-    
-    myPacket_t packet;
-    packet.type=3;
-    packet.crc=0;
+    sendHeader(filename, sockfd, server_addr);
+
+    myPacket_t packet={.type=DATA, .crc=0};
     memset(packet.dataPacket.data, 0, sizeof(packet.dataPacket.data));
+    while(! feof(fd)){
+         fread(packet.dataPacket.data, PACKET_MAX_LEN-4, 1, fd);
+         SEND(sockfd, (char*)&packet, sizeof(myPacket_t), server_addr);
 
-    //TODO THIS SECTION MUST BE CHANGED TO ME MORE UNIVERSAL
-    myPacket_t packet2={.type=0, .crc=0, .dataPacket.data=*filename};
-    //printf("%s\n",packet2.dataPacket.data);
-    sendto(sockfd, (char*)&packet2, sizeof(myPacket_t), 0, (struct sockaddr *)&server_addr, sizeof(server_addr));
-
-    //sprintf(send_buffer, "SIZE=%ld\n", ftell(file));
-    packet2.type=1;
-    packet2.crc=0;
-
-    fseek(file, 0L, SEEK_END);
-    printf(">>%d\n",ftell(file));
-    printf(">%d\n",htonl(ftell(file)));
-    sprintf(packet2.dataPacket.data, "%ld",htonl(ftell(file)));
-    fseek(file, 0L, SEEK_SET);
-    //printf("%s\n",packet2.dataPacket.data);
-    sendto(sockfd, (char*)&packet2, sizeof(myPacket_t), 0, (struct sockaddr *)&server_addr, sizeof(server_addr));
-
-    //sprintf(send_buffer, "START\n");
-    packet2.type=2;
-    packet2.crc=0;
-    memset(packet2.dataPacket.data, 0, sizeof(packet2.dataPacket.data));
-    sendto(sockfd, (char*)&packet2, sizeof(myPacket_t), 0, (struct sockaddr *)&server_addr, sizeof(server_addr));
-    //TODO THIS SECTION MUST BE CHANGED TO ME MORE UNIVERSAL
-
-
-    while(! feof(file)){
-         fread(packet.dataPacket.data, PACKET_MAX_LEN-4, 1, file);
-         sendto(sockfd, (char*) &packet, sizeof(myPacket_t), 0, (struct sockaddr *)&server_addr, sizeof(server_addr));
-         //printf("%s\n",packet.dataPacket.data);
-         //sleep(2);
     }
 
+    packet.type=END;
+    packet.crc=0;
+    memset(packet.dataPacket.data, 0, sizeof(packet.dataPacket.data));
+    SEND(sockfd, (char*)&packet, sizeof(myPacket_t), server_addr);
 
-    //size_t bytes_read;
-
-    /*
-    sprintf(send_buffer, "STOP\n");
-    SEND(sockfd,send_buffer,strlen(send_buffer),server_addr);
-    */
-
-    packet2.type=9;
-    packet2.crc=0;
-    memset(packet2.dataPacket.data, 0, sizeof(packet2.dataPacket.data));
-    sendto(sockfd, (char*)&packet2, sizeof(myPacket_t), 0, (struct sockaddr *)&server_addr, sizeof(server_addr));
-
-    fclose(file);
+    fclose(fd);
     close(sockfd);
     return 0;
+}
+
+void sendHeader(char *filename, int sockfd, struct sockaddr_in server_addr){
+    myPacket_t packet;
+
+    packet.type=NAME;
+    packet.crc=0;
+    memcpy(packet.dataPacket.data, filename, PACKET_MAX_LEN-4);
+    SEND(sockfd, (char*)&packet, sizeof(myPacket_t), server_addr);
+
+    packet.type=SIZE;
+    packet.crc=0;
+    FILE *fd=fileOpen(filename);
+    fseek(fd, 0L, SEEK_END);
+    sprintf(packet.dataPacket.data, "%ld",ftell(fd));
+    fseek(fd, 0L, SEEK_SET);
+    fclose(fd);
+    SEND(sockfd, (char*)&packet, sizeof(myPacket_t), server_addr);
+
+    packet.type=START;
+    packet.crc=0;
+    memset(packet.dataPacket.data, 0, sizeof(packet.dataPacket.data));
+    SEND(sockfd, (char*)&packet, sizeof(myPacket_t), server_addr);
+}
+
+void socksInit(struct sockaddr_in *server_addr, const char* server_ip, const int server_port,
+                struct sockaddr_in *client_addr, const int client_port, const int sockfd){
+    memset(server_addr, '\0', sizeof(*server_addr));
+    server_addr->sin_family = AF_INET;
+    server_addr->sin_port = htons(server_port);
+
+    if(inet_aton(server_ip, &server_addr->sin_addr) == 0)
+        perror("Invalid server IP address");
+
+    memset(client_addr, '\0', sizeof(*client_addr));
+    client_addr->sin_family = AF_INET;
+    client_addr->sin_addr.s_addr = INADDR_ANY;
+    client_addr->sin_port = htons(client_port);
+
+    if(bind(sockfd, (struct sockaddr *) client_addr, sizeof(*client_addr)) < 0)
+        perror("Error on binding");
+}
+
+FILE* fileOpen(char *fn){
+    FILE *fd=fopen(fn, "rb");
+    if(fd==NULL)
+        error("Error opening file");
+    return fd;
 }
 
 void error(const char *msg){
