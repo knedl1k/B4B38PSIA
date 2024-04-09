@@ -14,6 +14,20 @@
 
 #define PACKET_MAX_LEN 1024
 
+typedef struct{
+    unsigned char data[PACKET_MAX_LEN-4];
+}myDataPacket_t;
+
+typedef struct{
+    short type;
+    short crc;
+    union{
+        myDataPacket_t dataPacket;
+    };
+}myPacket_t;
+
+//setsockopt(sockfd, SOL_SOCKET, SO_RCVTIMEO, (const char*)&nTimeout, sizeof(int))
+
 void error(const char *msg);
 
 int main(int argc, char *argv[]){
@@ -39,44 +53,50 @@ int main(int argc, char *argv[]){
 
     if (bind(sockfd, (struct sockaddr *) &server_addr, sizeof(server_addr)) < 0)
         error("Error on binding");
-    
+
     FILE *file=NULL;
     char filename[256];
     uint32_t expected_position=0;
     int stop_received=0;
 
-    while (! stop_received){
-        char recv_buffer[PACKET_MAX_LEN];
-        ssize_t recv_len=recvfrom(sockfd, recv_buffer, PACKET_MAX_LEN, 0, (struct sockaddr *)&client_addr, &client_len);
-        if (recv_len < 0)
-            error("Error receiving data");
-        
-        recv_buffer[recv_len]='\0';
 
-        if (strncmp(recv_buffer, "NAME=", 5) == 0){
-            sscanf(recv_buffer, "NAME=%s", filename);
-            file=fopen(filename, "wb");
-            if (file == NULL)
-                error("Error creating file");
-            
-        }else if (strncmp(recv_buffer, "SIZE=", 5) == 0){
-            // We can use SIZE if necessary
-        }else if (strncmp(recv_buffer, "START", 5) == 0){
-            // We can handle START if necessary
-        }else if (strncmp(recv_buffer, "STOP", 4) == 0){
-            stop_received=1;
-        }else{
-            uint32_t position;
-            memcpy(&position, recv_buffer, sizeof(uint32_t));
-            position=ntohl(position);
-            if (position != expected_position){
-                fprintf(stderr, "Received out-of-order data, ignoring\n");
-                continue;
-            }
-            fwrite(recv_buffer + 4, 1, recv_len - 4, file);
-            expected_position += recv_len - 4;
-        }
+
+    myPacket_t packet;
+
+    int start_received = 0;
+    uint32_t file_size = 0;
+
+while (! stop_received){
+    ssize_t recv_len=recvfrom(sockfd, &packet, sizeof(myPacket_t), 0, (struct sockaddr *)&client_addr, &client_len);
+    if (recv_len < 0)
+        error("Error receiving data");
+    if(packet.type==0){
+        file=fopen(packet.dataPacket.data,"w");
     }
+    if (packet.type == 1){ // Assuming type 1 is for file size
+        if (!start_received)
+            error("Received file size before start signal");
+
+        if (recv_len < sizeof(uint32_t))
+            error("Received packet is too small for file size");
+
+        memcpy(&file_size, packet.dataPacket.data, sizeof(uint32_t));
+        file_size = ntohl(file_size); // Convert from network byte order to host byte order
+    } else if (packet.type == 2){ // Assuming type 2 is for START
+        start_received = 1;
+    } else if (packet.type == 3) { // Assuming type 3 is for data
+        if (!start_received)
+            error("Received data before start signal");
+
+        fwrite(packet.dataPacket.data, 1, recv_len - sizeof(short) * 2, file);
+    } else if (packet.type == 9){
+        stop_received = 1;
+        break;
+    }
+    else {
+        error("Received unexpected instruction!\n");
+    }
+}
 
     fclose(file);
     close(sockfd);
