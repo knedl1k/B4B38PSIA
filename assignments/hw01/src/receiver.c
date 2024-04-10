@@ -55,10 +55,10 @@ int main(int argc, char *argv[]){
 
         switch(packet.type){
             case NAME:
-                file=fopen(packet.dataPacket.data, "w");
+                file=fopen((char*)packet.dataPacket.data, "w");
                 fprintf(stderr,"INFO: file name - %s\n",packet.dataPacket.data);
                 break;
-            case SIZE:
+            case SIZE: ;
                 size_t i=0;
                 for(;;){
                     if(packet.dataPacket.data[i]=='\0')
@@ -84,7 +84,7 @@ int main(int argc, char *argv[]){
                 fprintf(stderr, "Error: instruction %d with data %s not implemented!\n", packet.type, packet.dataPacket.data);
         }
     }
-    fclose(file);
+    //fclose(file);
     close(sockfd);
     return 0;
 }

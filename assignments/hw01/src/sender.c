@@ -77,7 +77,7 @@ void sendHeader(char *filename, int sockfd, struct sockaddr_in server_addr){
     packet.crc=0;
     FILE *fd=fileOpen(filename);
     fseek(fd, 0L, SEEK_END);
-    sprintf(packet.dataPacket.data, "%ld",ftell(fd));
+    sprintf((char*)packet.dataPacket.data, "%ld",ftell(fd));
     fseek(fd, 0L, SEEK_SET);
     fclose(fd);
     SEND(sockfd, (char*)&packet, sizeof(myPacket_t), server_addr);
