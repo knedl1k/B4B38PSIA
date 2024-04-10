@@ -2,6 +2,7 @@
 #define PACKETS_H
 
 #define PACKET_MAX_LEN 1024
+#define SENDTO_ERROR -1
 
 enum{
     NAME=0,
@@ -23,5 +24,7 @@ typedef struct{
     };
 }myPacket_t;
 
+#define SEND(sockfd,send_buffer,len,server_addr) \
+                (sendto(sockfd, send_buffer, len, 0, (struct sockaddr *)&server_addr, sizeof(server_addr)))
 
 #endif
