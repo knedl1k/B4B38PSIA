@@ -2,7 +2,8 @@
 #define PACKETS_H
 
 #define PACKET_MAX_LEN 1024
-#define SENDTO_ERROR -1
+#define PACKET_OFFSET 2*sizeof(short)
+#define SENDTO_ERROR (-1)
 
 enum{
     NAME=0,
@@ -13,7 +14,7 @@ enum{
 };
 
 typedef struct{
-    unsigned char data[PACKET_MAX_LEN-4];
+    unsigned char data[PACKET_MAX_LEN-PACKET_OFFSET];
 }myDataPacket_t;
 
 typedef struct{

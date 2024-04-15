@@ -8,7 +8,6 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <stdint.h>
 #include <unistd.h>
 #include <arpa/inet.h>
 #include <stdbool.h>
@@ -19,9 +18,10 @@ void error(const char *msg);
 FILE* fileOpen(const char *fn);
 void socksInit(struct sockaddr_in *server_addr, const char* server_ip, int server_port,
                 struct sockaddr_in *client_addr, int client_port, int sockfd);
-void sendHeader(const char *filename, int sockfd, struct sockaddr_in server_addr);
+void sendHeader(const char *filename, int sockfd, struct sockaddr_in server_addr, size_t file_length);
 bool sendFile(FILE *fd, int sockfd, struct sockaddr_in server_addr);
 bool endTransfer(int sockfd, struct sockaddr_in server_addr);
+size_t fileLength(const char *filename);
 
 int main(int argc, char *argv[]){
     if(argc<5){
@@ -34,6 +34,8 @@ int main(int argc, char *argv[]){
     const char *filename=argv[3];
     const int client_port=atoi(argv[4]);
 
+    size_t file_length = fileLength(filename);
+
     int sockfd=socket(AF_INET, SOCK_DGRAM, 0);
     if(sockfd<0)
         error("Error opening socket");
@@ -43,7 +45,7 @@ int main(int argc, char *argv[]){
     socksInit(&server_addr, server_ip, server_port, &client_addr, client_port, sockfd);
     FILE *fd=fileOpen(filename);
 
-    sendHeader(filename, sockfd, server_addr);
+    sendHeader(filename, sockfd, server_addr, file_length);
 
     if(! sendFile(fd, sockfd, server_addr))
         error("Error has occured in transfer!\n");
@@ -61,7 +63,9 @@ bool sendFile(FILE *fd, const int sockfd, const struct sockaddr_in server_addr) 
     memset(packet.dataPacket.data, 0, sizeof(packet.dataPacket.data));
     bool ret=true;
     while(! feof(fd) && ret){
-        fread(packet.dataPacket.data, PACKET_MAX_LEN-4, 1, fd);
+        memset(packet.dataPacket.data, 0, sizeof(packet.dataPacket.data));
+        fread(packet.dataPacket.data, PACKET_MAX_LEN-PACKET_OFFSET, 1, fd);
+
         if(SEND(sockfd, (char*)&packet, sizeof(myPacket_t), server_addr) == SENDTO_ERROR)
             ret=false;
     }
@@ -74,7 +78,7 @@ bool endTransfer(const int sockfd, const struct sockaddr_in server_addr) {
     return SEND(sockfd, (char*)&packet, sizeof(myPacket_t), server_addr) != SENDTO_ERROR;
 }
 
-void sendHeader(const char *filename, const int sockfd, const struct sockaddr_in server_addr){
+void sendHeader(const char *filename, const int sockfd, const struct sockaddr_in server_addr, const size_t file_length){
     myPacket_t packet;
 
     packet.type=NAME;
@@ -84,11 +88,7 @@ void sendHeader(const char *filename, const int sockfd, const struct sockaddr_in
 
     packet.type=SIZE;
     packet.crc=0;
-    FILE *fd=fileOpen(filename);
-    fseek(fd, 0L, SEEK_END);
-    sprintf((char*)packet.dataPacket.data, "%ld",ftell(fd));
-    fseek(fd, 0L, SEEK_SET);
-    fclose(fd);
+    sprintf((char*)packet.dataPacket.data, "%ld",file_length);
     SEND(sockfd, (char*)&packet, sizeof(myPacket_t), server_addr); //TODO handle return value?
 
     packet.type=START;
@@ -125,4 +125,13 @@ FILE* fileOpen(const char *fn){
 void error(const char *msg){
     perror(msg);
     exit(100);
+}
+
+size_t fileLength(const char *filename){
+    FILE *fl=fileOpen(filename);
+    fseek(fl, 0L, SEEK_END);
+    size_t file_length=ftell(fl);
+    fseek(fl, 0L, SEEK_SET);
+    fclose(fl);
+    return file_length;
 }

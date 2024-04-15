@@ -55,6 +55,7 @@ void managePacketStream(const int sockfd, const struct sockaddr_in *client_addr)
 
     myPacket_t packet;
     uint32_t file_size=0;
+    uint32_t received_size=0;
     socklen_t client_len=sizeof(client_addr);
 
     while(! stop_received){
@@ -87,7 +88,14 @@ void managePacketStream(const int sockfd, const struct sockaddr_in *client_addr)
                     stop_received=true;
                     fprintf(stderr,"Error: data before START, exiting..\n");
                 }
-                fwrite(packet.dataPacket.data, 1, recv_len - sizeof(short) * 2, file); //TODO handle the return value?
+                printf("n:%ld\n",recv_len - sizeof(short)*2);
+                if(received_size + sizeof(packet.dataPacket.data) < file_size){
+                    fwrite(packet.dataPacket.data, 1, sizeof(packet.dataPacket.data), file); //TODO handle the return value? recv_len - sizeof(short) * 2
+                    received_size+=sizeof(packet.dataPacket.data);
+                }else{
+                    fwrite(packet.dataPacket.data, 1, file_size - received_size, file);
+                    received_size=file_size;
+                }
                 break;
             case END:
                 stop_received=true;
