@@ -58,6 +58,9 @@ void managePacketStream(const int sockfd, const struct sockaddr_in *client_addr)
     uint32_t received_size=0;
     socklen_t client_len=sizeof(client_addr);
 
+    unsigned char received_hash[SHA256_DIGEST_LENGTH];
+    unsigned char calculated_hash[SHA256_DIGEST_LENGTH];
+
     while(! stop_received){
         ssize_t recv_len=recvfrom(sockfd, &packet, sizeof(myPacket_t), //TODO handle the return value?
                                   0,(struct sockaddr *) &client_addr,&client_len);
@@ -88,7 +91,7 @@ void managePacketStream(const int sockfd, const struct sockaddr_in *client_addr)
                     stop_received=true;
                     fprintf(stderr,"Error: data before START, exiting..\n");
                 }
-                printf("n:%ld\n",recv_len - sizeof(short)*2);
+                //printf("n:%ld\n",recv_len - sizeof(short)*2);
                 if(received_size + sizeof(packet.dataPacket.data) < file_size){
                     fwrite(packet.dataPacket.data, 1, sizeof(packet.dataPacket.data), file); //TODO handle the return value? recv_len - sizeof(short) * 2
                     received_size+=sizeof(packet.dataPacket.data);
@@ -105,6 +108,13 @@ void managePacketStream(const int sockfd, const struct sockaddr_in *client_addr)
                         packet.type, packet.dataPacket.data);
         }
     }
+    
+    if(memcmp(received_hash, calculated_hash, SHA256_DIGEST_LENGTH) == 0) {
+        printf("File received correctly\n");
+    } else {
+        printf("Error during file transmission\n");
+    }
+
     fclose(file);
 }
 
