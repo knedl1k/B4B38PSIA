@@ -14,6 +14,8 @@ SENDER_TARGET+=send.bin
 RECEIVE_TARGET+=rec.bin
 
 ARCHIVE_TARGET=hw01
+CFILES+=$(SENDER_SOURCES) $(RECEIVE_SOURCES)
+HFILES+=packets.h
 
 all: compile-sender compile-receiver
 
