@@ -7,28 +7,18 @@
 
 #include <stdio.h>
 #include <stdlib.h>
-#include <string.h>
 #include <stdint.h>
-#include <unistd.h>
-#include <arpa/inet.h>
+#include <string.h>
 #include <stdbool.h>
-#include <openssl/sha.h>
+#include <arpa/inet.h>
 
 #include "packets.h"
 #include "hash.h"
 
 
-
 void error(const char *msg);
+void managePacketStream(int sockfd, const struct sockaddr_in *client_addr, const struct sockaddr_in *server_addr);
 
-void managePacketStream(int sockfd, const struct sockaddr_in *client_addr);
-
-void printSHAsum(unsigned char* md) {
-    int i;
-    for(i=0; i <SHA256_DIGEST_LENGTH; i++) {
-        printf("%02x",md[i]);
-    }
-}
 
 int main(int argc, char *argv[]){
     if(argc < 2){
@@ -53,13 +43,13 @@ int main(int argc, char *argv[]){
     if(bind(sockfd,(struct sockaddr *) &server_addr, sizeof(server_addr)) < 0)
         error("Error on binding");
 
-    managePacketStream(sockfd, &client_addr);
+    managePacketStream(sockfd, &client_addr, &server_addr);
 
     close(sockfd);
     return 0;
 }
 
-void managePacketStream(const int sockfd, const struct sockaddr_in *client_addr){
+void managePacketStream(const int sockfd, const struct sockaddr_in *client_addr, const struct sockaddr_in *server_addr){
     FILE *fd=NULL;
     bool start_received=false;
     bool hash_check=false;
@@ -80,10 +70,7 @@ void managePacketStream(const int sockfd, const struct sockaddr_in *client_addr)
             case NAME: ;
                 size_t file_name_len=strlen((char*)packet.dataPacket.data);
                 file_name=malloc(file_name_len); //TODO handle the return value
-                //printf("strl:%ld, siof:%ld\n",strlen((char*)packet.dataPacket.data), sizeof(packet.dataPacket.data));
                 memcpy(file_name,packet.dataPacket.data, file_name_len);
-                //file_name[file_name_len]='\0';
-                //printf("%ld\n",strlen(file_name));
 
                 fd=fopen(file_name, "w"); //TODO handle the return value?
                 fprintf(stderr, "INFO: fd name - %s.\n", file_name);
@@ -122,20 +109,18 @@ void managePacketStream(const int sockfd, const struct sockaddr_in *client_addr)
                 unsigned char sender_hash[SHA256_DIGEST_LENGTH];
                 memcpy(sender_hash,packet.dataPacket.data,SHA256_DIGEST_LENGTH);
                 unsigned char receiver_hash[SHA256_DIGEST_LENGTH];
-                //printf("strlen:%ld, sizeof:%ld\n",strlen(file_name),sizeof(file_name));
                 calculateHash(file_name, file_size, receiver_hash);
+
                 if(memcmp(sender_hash, receiver_hash, SHA256_DIGEST_LENGTH)){
                     //TODO send ERROR to sender!
-                    printf("HASH ERROR!\n");
+                    fprintf(stderr,"INFO: SHA256sum mismatch!\n");
                 }else{
                     //TODO send OK to sender
-                    hash_check=true;
-                    printf("HASH OK!\n");
+                    fprintf(stderr,"INFO: SHA256sum OK!\n");
                 }
 
-
+                hash_check=true;
                 break;
-
 
             default:
                 fprintf(stderr, "Error: instruction %d with data %s not implemented!\n",

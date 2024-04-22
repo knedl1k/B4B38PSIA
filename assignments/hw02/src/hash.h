@@ -14,5 +14,6 @@
 
 
 void calculateHash(const char *file_name, size_t file_size, unsigned char *sha256_hash);
+void printSHAsum(unsigned char *md);
 
 #endif

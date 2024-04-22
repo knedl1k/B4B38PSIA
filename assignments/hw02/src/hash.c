@@ -14,3 +14,7 @@ void calculateHash(const char *file_name, size_t file_size, unsigned char *sha25
     SHA256((unsigned char*)file_buffer, file_size, sha256_hash);
     munmap(file_buffer, file_size);
 }
+void printSHAsum(unsigned char *md){
+    for(size_t i=0; i<SHA256_DIGEST_LENGTH; ++i)
+        printf("%02x",md[i]);
+}

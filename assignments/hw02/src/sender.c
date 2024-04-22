@@ -8,13 +8,12 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <unistd.h>
-#include <arpa/inet.h>
 #include <stdbool.h>
+#include <arpa/inet.h>
 #include <fcntl.h>
 
-#include "packets.h"
 #include "hash.h"
+#include "packets.h"
 
 
 void error(const char *msg);
@@ -29,14 +28,6 @@ bool sendString(const int sockfd, const struct sockaddr_in server_addr, myPacket
 bool hashResolve(const int sockfd, const struct sockaddr_in server_addr, const char *file_name, size_t file_size);
 
 
-void printSHAsum(unsigned char* md) {
-    int i;
-    for(i=0; i <SHA256_DIGEST_LENGTH; i++) {
-            printf("%02x",md[i]);
-    }
-}
-
-
 int main(int argc, char *argv[]){
     if(argc<5){
         fprintf(stderr,"Usage: %s <server_ip> <server_port> <file_name> <client_port>\n", argv[0]);
@@ -48,7 +39,7 @@ int main(int argc, char *argv[]){
     const char *file_name=argv[3];
     const int client_port=atoi(argv[4]);
 
-    size_t file_size = fileLength(file_name);
+    size_t file_size=fileLength(file_name);
 
     int sockfd=socket(AF_INET, SOCK_DGRAM, 0);
     if(sockfd<0)
@@ -68,10 +59,16 @@ int main(int argc, char *argv[]){
         error("Error while closing the transmission!\n");
 
     if(! hashResolve(sockfd, server_addr, file_name, file_size))
-        error("Error while sending a SHAsum!\n");
+        error("Error while sending a SHA256sum!\n");
 
-    
+    /*
+    myPacket_t packet;
+    socklen_t client_len=sizeof(client_addr);
 
+    ssize_t recv_len=recvfrom(sockfd, &packet, sizeof(myPacket_t), //TODO handle the return value?
+                                  0,(struct sockaddr *) &client_addr,&client_len);
+    printf("code:%d\n",packet.type);
+    */
     fclose(fd);
     close(sockfd);
     return 0;
@@ -94,10 +91,8 @@ bool sendString(const int sockfd, const struct sockaddr_in server_addr, myPacket
     return ret;
 }
 
-
-bool sendFile(FILE *fd, const int sockfd, const struct sockaddr_in server_addr) {
+bool sendFile(FILE *fd, const int sockfd, const struct sockaddr_in server_addr){
     myPacket_t packet={.type=DATA, .crc=0};
-    //memset(packet.dataPacket.data, 0, sizeof(packet.dataPacket.data));
     bool ret=true;
     while(! feof(fd) && ret){
         memset(packet.dataPacket.data, 0, sizeof(packet.dataPacket.data));
@@ -109,7 +104,7 @@ bool sendFile(FILE *fd, const int sockfd, const struct sockaddr_in server_addr) 
     return ret;
 }
 
-bool endFileTransfer(const int sockfd, const struct sockaddr_in server_addr) {
+bool endFileTransfer(const int sockfd, const struct sockaddr_in server_addr){
     myPacket_t packet={.type=END, .crc=0};
     memset(packet.dataPacket.data, 0, sizeof(packet.dataPacket.data));
     return SEND(sockfd, (char*)&packet, sizeof(myPacket_t), server_addr) != SENDTO_ERROR;
@@ -137,16 +132,16 @@ void sendHeader(const char *file_name, const int sockfd, const struct sockaddr_i
 void socksInit(struct sockaddr_in *server_addr, const char* server_ip, const int server_port,
                 struct sockaddr_in *client_addr, const int client_port, const int sockfd){
     memset(server_addr, '\0', sizeof(*server_addr));
-    server_addr->sin_family = AF_INET;
-    server_addr->sin_port = htons(server_port);
+    server_addr->sin_family=AF_INET;
+    server_addr->sin_port=htons(server_port);
 
     if(inet_aton(server_ip, &server_addr->sin_addr) == 0)
         error("Invalid server IP address");
 
     memset(client_addr, '\0', sizeof(*client_addr));
-    client_addr->sin_family = AF_INET;
-    client_addr->sin_addr.s_addr = INADDR_ANY;
-    client_addr->sin_port = htons(client_port);
+    client_addr->sin_family=AF_INET;
+    client_addr->sin_addr.s_addr=INADDR_ANY;
+    client_addr->sin_port=htons(client_port);
 
     if(bind(sockfd, (struct sockaddr *) client_addr, sizeof(*client_addr)) < 0)
         error("Error on binding");
