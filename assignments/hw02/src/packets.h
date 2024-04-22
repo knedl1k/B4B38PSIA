@@ -1,3 +1,9 @@
+// GNU General Public License v3.0
+// @knedl1k
+/*
+ * everything about packets
+ *
+ */
 #ifndef PACKETS_H
 #define PACKETS_H
 
@@ -10,6 +16,9 @@ enum{
     SIZE,
     START,
     DATA,
+    SHA256SUM,
+    ERROR,
+    OK,
     END
 };
 
