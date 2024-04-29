@@ -14,12 +14,12 @@
 
 #include "hash.h"
 #include "packets.h"
+#include "CRC/checksum.h"
 
 
 void error(const char *msg);
 FILE* fileOpen(const char *fn);
-void socksInit(struct sockaddr_in *server_addr, const char* server_ip, int server_port,
-                struct sockaddr_in *client_addr, int client_port, int sockfd);
+void socksInit(struct sockaddr_in *server_addr, const char* server_ip, int server_port);
 void sendHeader(const char *file_name, int sockfd, struct sockaddr_in server_addr, size_t file_size);
 bool sendFile(FILE *fd, int sockfd, struct sockaddr_in server_addr);
 bool endFileTransfer(int sockfd, struct sockaddr_in server_addr);
@@ -29,25 +29,24 @@ bool hashResolve(const int sockfd, const struct sockaddr_in server_addr, const c
 
 
 int main(int argc, char *argv[]){
-    if(argc<5){
-        fprintf(stderr,"Usage: %s <server_ip> <server_port> <file_name> <client_port>\n", argv[0]);
+    if(argc<4){
+        fprintf(stderr,"Usage: %s <server_IP> <server_port> <file_name>\n", argv[0]);
         exit(1);
     }
-
     const char *server_ip=argv[1];
     const int server_port=atoi(argv[2]);
     const char *file_name=argv[3];
-    const int client_port=atoi(argv[4]);
 
-    size_t file_size=fileLength(file_name);
+    const size_t file_size=fileLength(file_name);
 
-    int sockfd=socket(AF_INET, SOCK_DGRAM, 0);
-    if(sockfd<0)
-        error("Error opening socket");
+    int sockfd;
+    if((sockfd=socket(AF_INET, SOCK_DGRAM, 0))<0)
+        error("Error opening send socket");
 
-    struct sockaddr_in server_addr, client_addr;
+    struct sockaddr_in server_addr;
 
-    socksInit(&server_addr, server_ip, server_port, &client_addr, client_port, sockfd);
+    socksInit(&server_addr, server_ip, server_port);
+
     FILE *fd=fileOpen(file_name);
 
     sendHeader(file_name, sockfd, server_addr, file_size);
@@ -57,18 +56,11 @@ int main(int argc, char *argv[]){
 
     if(! endFileTransfer(sockfd, server_addr))
         error("Error while closing the transmission!\n");
-
+    //printf("file was transfered\n");
     if(! hashResolve(sockfd, server_addr, file_name, file_size))
         error("Error while sending a SHA256sum!\n");
 
-    /*
-    myPacket_t packet;
-    socklen_t client_len=sizeof(client_addr);
 
-    ssize_t recv_len=recvfrom(sockfd, &packet, sizeof(myPacket_t), //TODO handle the return value?
-                                  0,(struct sockaddr *) &client_addr,&client_len);
-    printf("code:%d\n",packet.type);
-    */
     fclose(fd);
     close(sockfd);
     return 0;
@@ -84,67 +76,132 @@ bool sendString(const int sockfd, const struct sockaddr_in server_addr, myPacket
             packet.dataPacket.data[i]=str[i+pos];
         }
         pos += PACKET_MAX_LEN - PACKET_OFFSET;
+        packet.crc=crc_32((unsigned char*)&packet, sizeof(packet)-sizeof(packet.crc));
 
-        if(SEND(sockfd, (char*)&packet, sizeof(myPacket_t), server_addr) == SENDTO_ERROR)
+
+        if(SEND(sockfd,(char*)&packet, sizeof(myPacket_t), server_addr) == SENDTO_ERROR)
             ret=false;
+        /* TODO
+         * while loop if CRC fails, resend the buffer again.
+         *
+         */
     }
     return ret;
 }
 
 bool sendFile(FILE *fd, const int sockfd, const struct sockaddr_in server_addr){
-    myPacket_t packet={.type=DATA, .crc=0};
+    myPacket_t packet;
     bool ret=true;
+    socklen_t server_len=sizeof(server_addr);
+    unsigned char buffer[sizeof(packet.dataPacket.data)];
     while(! feof(fd) && ret){
-        memset(packet.dataPacket.data, 0, sizeof(packet.dataPacket.data));
-        fread(packet.dataPacket.data, PACKET_MAX_LEN-PACKET_OFFSET, 1, fd);
+        uint8_t iter=0;
+        memset(buffer, 0, sizeof(buffer));
+        fread(buffer, PACKET_MAX_LEN-PACKET_OFFSET, 1, fd);
+        for(;;){
+            packet.type=DATA;
+            memset(packet.dataPacket.data, 0, sizeof(packet.dataPacket.data));
+            memcpy(packet.dataPacket.data, buffer, sizeof(buffer));
 
-        if(SEND(sockfd, (char*)&packet, sizeof(myPacket_t), server_addr) == SENDTO_ERROR)
-            ret=false;
+            packet.crc=crc_32((unsigned char*)&packet, sizeof(packet)-sizeof(packet.crc));
+
+            if(SEND(sockfd,(char*)&packet, sizeof(myPacket_t), server_addr) == SENDTO_ERROR){ //TODO handle return value?
+                ret=false;
+                break;
+            }
+
+            recvfrom(sockfd, &packet, sizeof(myPacket_t),0,(struct sockaddr *) &server_addr,
+                    &server_len);
+
+            if(packet.type == OK) break;
+
+            if(++iter>=5) error("Error CRC: sendFile\n");
+            usleep(100);
+        }
+
     }
     return ret;
 }
 
 bool endFileTransfer(const int sockfd, const struct sockaddr_in server_addr){
-    myPacket_t packet={.type=END, .crc=0};
-    memset(packet.dataPacket.data, 0, sizeof(packet.dataPacket.data));
-    return SEND(sockfd, (char*)&packet, sizeof(myPacket_t), server_addr) != SENDTO_ERROR;
+    bool ret=true;
+    myPacket_t packet;
+    uint8_t iter=0;
+    socklen_t server_len=sizeof(server_addr);
+    for(;;){
+        packet.type = END;
+        memset(packet.dataPacket.data, 0, sizeof(packet.dataPacket.data));
+        packet.crc = crc_32((unsigned char *) &packet, sizeof(packet) - sizeof(packet.crc));
+        if(SEND(sockfd,(char *) &packet, sizeof(myPacket_t), server_addr)==SENDTO_ERROR){ //TODO handle return value?
+            ret=false;
+            break;
+        }
+        recvfrom(sockfd, &packet, sizeof(myPacket_t),
+                 0,(struct sockaddr *) &server_addr, &server_len);
+
+        if(packet.type == OK) break;
+
+        if(++iter >= 5) error("Error CRC: END");
+    }
+
+    return ret;
 }
 
 void sendHeader(const char *file_name, const int sockfd, const struct sockaddr_in server_addr, const size_t file_size){
     myPacket_t packet;
+    uint8_t iter=0;
+    socklen_t server_len=sizeof(server_addr);
 
-    packet.type=NAME;
-    packet.crc=0;
-    memcpy(packet.dataPacket.data, file_name, PACKET_MAX_LEN-4);
-    SEND(sockfd, (char*)&packet, sizeof(myPacket_t), server_addr); //TODO handle return value?
+    for(;;){
+        packet.type = NAME;
+        memcpy(packet.dataPacket.data, file_name, PACKET_MAX_LEN - PACKET_OFFSET);
+        packet.crc = crc_32((unsigned char *) &packet, sizeof(packet) - sizeof(packet.crc));
+        SEND(sockfd,(char *) &packet, sizeof(myPacket_t), server_addr); //TODO handle return value?
 
-    packet.type=SIZE;
-    packet.crc=0;
-    sprintf((char*)packet.dataPacket.data, "%ld",file_size);
-    SEND(sockfd, (char*)&packet, sizeof(myPacket_t), server_addr); //TODO handle return value?
+        recvfrom(sockfd, &packet, sizeof(myPacket_t),
+                 0,(struct sockaddr *) &server_addr, &server_len);
 
-    packet.type=START;
-    packet.crc=0;
-    memset(packet.dataPacket.data, 0, sizeof(packet.dataPacket.data));
-    SEND(sockfd, (char*)&packet, sizeof(myPacket_t), server_addr); //TODO handle return value?
+        if(packet.type == OK) break;
+
+        if(++iter >= 5) error("Error CRC: NAME");
+    }
+
+    iter=0;
+    for(;;){
+        packet.type=SIZE;
+        sprintf((char*)packet.dataPacket.data, "%ld",file_size);
+        packet.crc=crc_32((unsigned char*)&packet, sizeof(packet)-sizeof(packet.crc));
+        SEND(sockfd,(char*)&packet, sizeof(myPacket_t), server_addr); //TODO handle return value?
+
+        recvfrom(sockfd, &packet, sizeof(myPacket_t),
+                 0,(struct sockaddr *) &server_addr,&server_len);
+
+        if(packet.type == OK) break;
+
+        if(++iter>=5) error("Error CRC: SIZE");
+    }
+
+    iter=0;
+    for(;;){
+        packet.type=START;
+        memset(packet.dataPacket.data, 0, sizeof(packet.dataPacket.data));
+        packet.crc=crc_32((unsigned char*)&packet, sizeof(packet)-sizeof(packet.crc));
+        SEND(sockfd,(char*)&packet, sizeof(myPacket_t), server_addr); //TODO handle return value?
+
+        recvfrom(sockfd, &packet, sizeof(myPacket_t),
+                 0,(struct sockaddr *) &server_addr,&server_len);
+
+        if(packet.type == OK) break;
+
+        if(++iter>=5) error("Error CRC: START");
+    }
 }
 
-void socksInit(struct sockaddr_in *server_addr, const char* server_ip, const int server_port,
-                struct sockaddr_in *client_addr, const int client_port, const int sockfd){
-    memset(server_addr, '\0', sizeof(*server_addr));
+void socksInit(struct sockaddr_in *server_addr, const char* server_ip, const int server_port){
     server_addr->sin_family=AF_INET;
     server_addr->sin_port=htons(server_port);
-
     if(inet_aton(server_ip, &server_addr->sin_addr) == 0)
         error("Invalid server IP address");
-
-    memset(client_addr, '\0', sizeof(*client_addr));
-    client_addr->sin_family=AF_INET;
-    client_addr->sin_addr.s_addr=INADDR_ANY;
-    client_addr->sin_port=htons(client_port);
-
-    if(bind(sockfd, (struct sockaddr *) client_addr, sizeof(*client_addr)) < 0)
-        error("Error on binding");
 }
 
 FILE* fileOpen(const char *fn){
@@ -155,8 +212,8 @@ FILE* fileOpen(const char *fn){
 }
 
 void error(const char *msg){
-    perror(msg);
-    exit(100);
+    fprintf(stderr,"%s",msg);
+    exit(4);
 }
 
 size_t fileLength(const char *file_name){
@@ -171,6 +228,6 @@ size_t fileLength(const char *file_name){
 bool hashResolve(const int sockfd, const struct sockaddr_in server_addr, const char *file_name, size_t file_size){
     unsigned char sha256_hash[SHA256_DIGEST_LENGTH];
     calculateHash(file_name, file_size, sha256_hash);
-    myPacket_t packet={.type=SHA256SUM, .crc=0};
+    myPacket_t packet={.type=SHA256SUM};
     return sendString(sockfd, server_addr,packet, sha256_hash, SHA256_DIGEST_LENGTH);
 }

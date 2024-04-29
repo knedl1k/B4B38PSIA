@@ -8,7 +8,7 @@ CFLAGS+=-std=gnu17 -Wall -Wextra -pedantic -g -O3 #-Werror
 LFLAGS+=-lssl -lcrypto
 #LDFLAGS+=-static
 
-COMBINED_SOURCES+=hash.c
+COMBINED_SOURCES+=hash.c CRC/crc32.c
 SENDER_SOURCES+=sender.c
 RECEIVE_SOURCES+=receiver.c
 SENDER_TARGET+=send.bin

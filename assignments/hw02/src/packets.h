@@ -8,7 +8,7 @@
 #define PACKETS_H
 
 #define PACKET_MAX_LEN 1024
-#define PACKET_OFFSET 2*sizeof(short)
+#define PACKET_OFFSET (sizeof(short)+sizeof(uint32_t))
 #define SENDTO_ERROR (-1)
 
 enum{
@@ -17,8 +17,8 @@ enum{
     START,
     DATA,
     SHA256SUM,
-    ERROR,
     OK,
+    ERROR,
     END
 };
 
@@ -28,11 +28,11 @@ typedef struct{
 
 typedef struct{
     short type;
-    short crc;
     union{
         myDataPacket_t dataPacket;
     };
-}myPacket_t;
+    uint32_t crc;
+}__attribute__((packed)) myPacket_t;
 
 #define SEND(sockfd,send_buffer,len,server_addr) \
                 (sendto(sockfd, send_buffer, len, 0, (struct sockaddr *)&server_addr, sizeof(server_addr)))
