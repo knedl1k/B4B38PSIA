@@ -16,7 +16,7 @@ RECEIVE_TARGET+=rec.bin
 
 ARCHIVE_TARGET=hw02
 CFILES+=$(SENDER_SOURCES) $(RECEIVE_SOURCES) $(COMBINED_SOURCES)
-HFILES+=packets.h hash.h
+HFILES+=packets.h hash.h CRC/checksum.h CRC/gentab32.inc
 
 all: compile-sender compile-receiver
 
@@ -27,10 +27,12 @@ cr compile-receiver:
 	$(CC) $(CFLAGS) $(LDFLAGS) $(RECEIVE_SOURCES) -o $(RECEIVE_TARGET) $(COMBINED_SOURCES) $(LFLAGS)
 
 cl clean:
-	rm *.bin *.zip *.tar.xz
+	rm -f *.bin 
+	find . -name '*.zip'    -delete
+	find . -name '*.tar.xz' -delete
 
-zip:
+z zip:
 	zip $(ARCHIVE_TARGET).zip $(CFILES) $(HFILES)
 
-tar:
+t tar:
 	tar -czvf $(ARCHIVE_TARGET).tar.xz $(CFILES) $(HFILES)
