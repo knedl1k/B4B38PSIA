@@ -77,6 +77,7 @@ void managePacketStream(const int sockfd){
 
         switch(packet.type){
             case NAME: ;
+            /*
                 if(! checkCRC(packet)){ //CRC does not match
                     packet2.type=ERROR;
                     packet2.crc= crc_32((unsigned char*)&packet2, sizeof(packet2)-sizeof(packet2.crc));
@@ -86,7 +87,7 @@ void managePacketStream(const int sockfd){
                 packet2.type=OK;
                 packet2.crc= crc_32((unsigned char*)&packet2, sizeof(packet2)-sizeof(packet2.crc));
                 SEND(sockfd, (char*)&packet2, sizeof(myPacket_t), from);
-
+                */
                 size_t file_name_len=strlen((char*)packet.dataPacket.data);
                 file_name=malloc(file_name_len); //TODO handle the return value
                 memcpy(file_name,packet.dataPacket.data, file_name_len);
@@ -167,17 +168,19 @@ void managePacketStream(const int sockfd){
                 fclose(fd);
                 break;
             case SHA256SUM: ;
-            /*
+
                 if(! checkCRC(packet)){ //CRC does not match
+                    printf("%d - %d\n",packet.crc, crc_32((unsigned char *)&packet, sizeof(packet)-sizeof(packet.crc) ));
                     packet2.type=ERROR;
                     packet2.crc= crc_32((unsigned char*)&packet2, sizeof(packet2)-sizeof(packet2.crc));
                     SEND(sockfd, (char*)&packet2, sizeof(myPacket_t), from);
                     break;
                 }
+                //printf("%d - %d\n",packet.crc, crc_32((unsigned char *)&packet, sizeof(packet)-sizeof(packet.crc) ));
                 packet2.type=OK;
                 packet2.crc= crc_32((unsigned char*)&packet2, sizeof(packet2)-sizeof(packet2.crc));
                 SEND(sockfd, (char*)&packet2, sizeof(myPacket_t), from);
-            */
+
                 unsigned char sender_hash[SHA256_DIGEST_LENGTH];
                 memcpy(sender_hash,packet.dataPacket.data,SHA256_DIGEST_LENGTH);
                 unsigned char receiver_hash[SHA256_DIGEST_LENGTH];

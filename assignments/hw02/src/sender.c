@@ -11,6 +11,7 @@
 #include <stdbool.h>
 #include <arpa/inet.h>
 #include <fcntl.h>
+#include <errno.h>
 
 #include "hash.h"
 #include "packets.h"
@@ -42,9 +43,11 @@ int main(int argc, char *argv[]){
     int sockfd;
     if((sockfd=socket(AF_INET, SOCK_DGRAM, 0))<0)
         error("Error opening send socket");
+    struct timeval timeout = {.tv_sec = 1, .tv_usec = 0};
+    if(setsockopt(sockfd, SOL_SOCKET, SO_RCVTIMEO, &timeout, sizeof(timeout)) < 0)
+        error("setsockopt failed");
 
     struct sockaddr_in server_addr;
-
     socksInit(&server_addr, server_ip, server_port);
 
     FILE *fd=fileOpen(file_name);
@@ -69,22 +72,36 @@ int main(int argc, char *argv[]){
 bool sendString(const int sockfd, const struct sockaddr_in server_addr, myPacket_t packet, unsigned char* str, const size_t len){
     bool ret=true;
     size_t pos=0;
+    unsigned char buffer[sizeof(packet.dataPacket.data)];
+
+    myPacket_t tmp=packet;
+    socklen_t server_len=sizeof(server_addr);
 
     while(pos < len && ret){
         memset(packet.dataPacket.data, 0, sizeof(packet.dataPacket.data));
         for(size_t i=0; i<PACKET_MAX_LEN-PACKET_OFFSET && i<len; ++i){
-            packet.dataPacket.data[i]=str[i+pos];
+            buffer[i]=str[i+pos];
         }
         pos += PACKET_MAX_LEN - PACKET_OFFSET;
-        packet.crc=crc_32((unsigned char*)&packet, sizeof(packet)-sizeof(packet.crc));
+        uint8_t iter=0;
+        for(;;){
+            memcpy(packet.dataPacket.data, buffer, sizeof(packet.dataPacket.data));
+            packet.crc=crc_32((unsigned char*)&packet, sizeof(packet)-sizeof(packet.crc));
+            packet.type=tmp.type;
 
+            if(SEND(sockfd,(char*)&packet, sizeof(myPacket_t), server_addr) == SENDTO_ERROR){
+                ret=false;
+                break;
+            }
 
-        if(SEND(sockfd,(char*)&packet, sizeof(myPacket_t), server_addr) == SENDTO_ERROR)
-            ret=false;
-        /* TODO
-         * while loop if CRC fails, resend the buffer again.
-         *
-         */
+            recvfrom(sockfd, &packet, sizeof(myPacket_t),0,(struct sockaddr *) &server_addr,
+                    &server_len);
+
+            if(packet.type == OK) break;
+
+            if(++iter>=5) error("Error CRC: hash\n");
+        }
+
     }
     return ret;
 }
@@ -116,7 +133,7 @@ bool sendFile(FILE *fd, const int sockfd, const struct sockaddr_in server_addr){
             if(packet.type == OK) break;
 
             if(++iter>=5) error("Error CRC: sendFile\n");
-            usleep(100);
+            //usleep(100);
         }
 
     }
@@ -158,8 +175,12 @@ void sendHeader(const char *file_name, const int sockfd, const struct sockaddr_i
         packet.crc = crc_32((unsigned char *) &packet, sizeof(packet) - sizeof(packet.crc));
         SEND(sockfd,(char *) &packet, sizeof(myPacket_t), server_addr); //TODO handle return value?
 
-        recvfrom(sockfd, &packet, sizeof(myPacket_t),
-                 0,(struct sockaddr *) &server_addr, &server_len);
+        if(recvfrom(sockfd, &packet, sizeof(myPacket_t),
+           0,(struct sockaddr *) &server_addr, &server_len)==-1){
+            if(errno == EAGAIN && errno == EWOULDBLOCK)
+                fprintf(stderr,"INFO: did not receive ACK!\n");
+
+        }
 
         if(packet.type == OK) break;
 
