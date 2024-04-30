@@ -15,6 +15,7 @@
 #include "packets.h"
 #include "hash.h"
 #include "CRC/checksum.h"
+#include <errno.h>
 
 
 void error(const char *msg);
@@ -32,6 +33,9 @@ int main(int argc, char *argv[]){
 
     int sockfd;
     sockfd=socket(AF_INET, SOCK_DGRAM, 0);
+    /*struct timeval timeout = {.tv_sec = 1, .tv_usec = 0};
+    if(setsockopt(sockfd, SOL_SOCKET, SO_SNDTIMEO, &timeout, sizeof(timeout)) < 0)
+        error("setsockopt failed");*/
 
     //TODO move to separate function
     struct sockaddr_in local_addr;
@@ -71,13 +75,21 @@ void managePacketStream(const int sockfd){
 
     while(! hash_check){
         ssize_t recv_len=recvfrom(sockfd, &packet, sizeof(myPacket_t), //TODO handle the return value?
-                                  0,(struct sockaddr *) &from,&fromlen);
+                                 0,(struct sockaddr *) &from,&fromlen);
+
+        /*if(recvfrom(sockfd, &packet, sizeof(myPacket_t),
+           0,(struct sockaddr *) &from, &fromlen)==-1){
+            if(errno == EAGAIN && errno == EWOULDBLOCK)
+                fprintf(stderr,"INFO: did not receive ACK!\n");
+
+        }
+        */
         if(recv_len < 0)
             error("Error receiving data");
 
         switch(packet.type){
             case NAME: ;
-            /*
+            
                 if(! checkCRC(packet)){ //CRC does not match
                     packet2.type=ERROR;
                     packet2.crc= crc_32((unsigned char*)&packet2, sizeof(packet2)-sizeof(packet2.crc));
@@ -87,7 +99,7 @@ void managePacketStream(const int sockfd){
                 packet2.type=OK;
                 packet2.crc= crc_32((unsigned char*)&packet2, sizeof(packet2)-sizeof(packet2.crc));
                 SEND(sockfd, (char*)&packet2, sizeof(myPacket_t), from);
-                */
+                
                 size_t file_name_len=strlen((char*)packet.dataPacket.data);
                 file_name=malloc(file_name_len); //TODO handle the return value
                 memcpy(file_name,packet.dataPacket.data, file_name_len);
@@ -192,6 +204,8 @@ void managePacketStream(const int sockfd){
                     fprintf(stderr,"INFO: SHA256sum OK!\n");
                 
                 hash_check=true;
+
+                
                 break;
 
             default:

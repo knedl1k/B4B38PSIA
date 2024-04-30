@@ -94,8 +94,12 @@ bool sendString(const int sockfd, const struct sockaddr_in server_addr, myPacket
                 break;
             }
 
-            recvfrom(sockfd, &packet, sizeof(myPacket_t),0,(struct sockaddr *) &server_addr,
-                    &server_len);
+        if(recvfrom(sockfd, &packet, sizeof(myPacket_t),
+           0,(struct sockaddr *) &server_addr, &server_len)==-1){
+            if(errno == EAGAIN && errno == EWOULDBLOCK)
+                fprintf(stderr,"INFO: did not receive ACK!\n");
+
+        }
 
             if(packet.type == OK) break;
 
@@ -127,8 +131,12 @@ bool sendFile(FILE *fd, const int sockfd, const struct sockaddr_in server_addr){
                 break;
             }
 
-            recvfrom(sockfd, &packet, sizeof(myPacket_t),0,(struct sockaddr *) &server_addr,
-                    &server_len);
+            if(recvfrom(sockfd, &packet, sizeof(myPacket_t),
+            0,(struct sockaddr *) &server_addr, &server_len)==-1){
+                if(errno == EAGAIN && errno == EWOULDBLOCK)
+                    fprintf(stderr,"INFO: did not receive ACK!\n");
+
+            }
 
             if(packet.type == OK) break;
 
@@ -153,8 +161,12 @@ bool endFileTransfer(const int sockfd, const struct sockaddr_in server_addr){
             ret=false;
             break;
         }
-        recvfrom(sockfd, &packet, sizeof(myPacket_t),
-                 0,(struct sockaddr *) &server_addr, &server_len);
+        if(recvfrom(sockfd, &packet, sizeof(myPacket_t),
+           0,(struct sockaddr *) &server_addr, &server_len)==-1){
+            if(errno == EAGAIN && errno == EWOULDBLOCK)
+                fprintf(stderr,"INFO: did not receive ACK!\n");
+
+        }
 
         if(packet.type == OK) break;
 
@@ -168,6 +180,7 @@ void sendHeader(const char *file_name, const int sockfd, const struct sockaddr_i
     myPacket_t packet;
     uint8_t iter=0;
     socklen_t server_len=sizeof(server_addr);
+    packet.num = 0;
 
     for(;;){
         packet.type = NAME;
@@ -194,9 +207,12 @@ void sendHeader(const char *file_name, const int sockfd, const struct sockaddr_i
         packet.crc=crc_32((unsigned char*)&packet, sizeof(packet)-sizeof(packet.crc));
         SEND(sockfd,(char*)&packet, sizeof(myPacket_t), server_addr); //TODO handle return value?
 
-        recvfrom(sockfd, &packet, sizeof(myPacket_t),
-                 0,(struct sockaddr *) &server_addr,&server_len);
+        if(recvfrom(sockfd, &packet, sizeof(myPacket_t),
+           0,(struct sockaddr *) &server_addr, &server_len)==-1){
+            if(errno == EAGAIN && errno == EWOULDBLOCK)
+                fprintf(stderr,"INFO: did not receive ACK!\n");
 
+        }
         if(packet.type == OK) break;
 
         if(++iter>=5) error("Error CRC: SIZE");
@@ -209,8 +225,12 @@ void sendHeader(const char *file_name, const int sockfd, const struct sockaddr_i
         packet.crc=crc_32((unsigned char*)&packet, sizeof(packet)-sizeof(packet.crc));
         SEND(sockfd,(char*)&packet, sizeof(myPacket_t), server_addr); //TODO handle return value?
 
-        recvfrom(sockfd, &packet, sizeof(myPacket_t),
-                 0,(struct sockaddr *) &server_addr,&server_len);
+        if(recvfrom(sockfd, &packet, sizeof(myPacket_t),
+           0,(struct sockaddr *) &server_addr, &server_len)==-1){
+            if(errno == EAGAIN && errno == EWOULDBLOCK)
+                fprintf(stderr,"INFO: did not receive ACK!\n");
+
+        }
 
         if(packet.type == OK) break;
 
