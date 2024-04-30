@@ -8,7 +8,7 @@
 #define PACKETS_H
 
 #define PACKET_MAX_LEN 1024
-#define PACKET_OFFSET (sizeof(short)+sizeof(uint32_t)+sizeof(uint8_t))
+#define PACKET_OFFSET (sizeof(short)+sizeof(uint32_t)+sizeof(bool))
 #define SENDTO_ERROR (-1)
 
 enum{
@@ -28,7 +28,7 @@ typedef struct{
 
 typedef struct{
     short type;
-    uint8_t num;
+    bool num;
     union{
         myDataPacket_t dataPacket;
     };

@@ -76,6 +76,7 @@ bool sendString(const int sockfd, const struct sockaddr_in server_addr, myPacket
 
     myPacket_t tmp=packet;
     socklen_t server_len=sizeof(server_addr);
+    packet.num = 0;
 
     while(pos < len && ret){
         memset(packet.dataPacket.data, 0, sizeof(packet.dataPacket.data));
@@ -105,8 +106,9 @@ bool sendString(const int sockfd, const struct sockaddr_in server_addr, myPacket
 
             if(++iter>=5) error("Error CRC: hash\n");
         }
-
+     packet.num++;
     }
+   
     return ret;
 }
 
@@ -115,6 +117,7 @@ bool sendFile(FILE *fd, const int sockfd, const struct sockaddr_in server_addr){
     bool ret=true;
     socklen_t server_len=sizeof(server_addr);
     unsigned char buffer[sizeof(packet.dataPacket.data)];
+    packet.num =0;
     while(! feof(fd) && ret){
         uint8_t iter=0;
         memset(buffer, 0, sizeof(buffer));
@@ -143,8 +146,9 @@ bool sendFile(FILE *fd, const int sockfd, const struct sockaddr_in server_addr){
             if(++iter>=5) error("Error CRC: sendFile\n");
             //usleep(100);
         }
-
+    packet.num++;
     }
+    
     return ret;
 }
 
@@ -153,6 +157,7 @@ bool endFileTransfer(const int sockfd, const struct sockaddr_in server_addr){
     myPacket_t packet;
     uint8_t iter=0;
     socklen_t server_len=sizeof(server_addr);
+    packet.num = 0;
     for(;;){
         packet.type = END;
         memset(packet.dataPacket.data, 0, sizeof(packet.dataPacket.data));
@@ -173,6 +178,7 @@ bool endFileTransfer(const int sockfd, const struct sockaddr_in server_addr){
         if(++iter >= 5) error("Error CRC: END");
     }
 
+
     return ret;
 }
 
@@ -181,6 +187,7 @@ void sendHeader(const char *file_name, const int sockfd, const struct sockaddr_i
     uint8_t iter=0;
     socklen_t server_len=sizeof(server_addr);
     packet.num = 0;
+    
 
     for(;;){
         packet.type = NAME;
@@ -198,8 +205,9 @@ void sendHeader(const char *file_name, const int sockfd, const struct sockaddr_i
         if(packet.type == OK) break;
 
         if(++iter >= 5) error("Error CRC: NAME");
+    
     }
-
+    packet.num++;
     iter=0;
     for(;;){
         packet.type=SIZE;
@@ -216,7 +224,9 @@ void sendHeader(const char *file_name, const int sockfd, const struct sockaddr_i
         if(packet.type == OK) break;
 
         if(++iter>=5) error("Error CRC: SIZE");
+    
     }
+    packet.num++;
 
     iter=0;
     for(;;){
@@ -235,6 +245,7 @@ void sendHeader(const char *file_name, const int sockfd, const struct sockaddr_i
         if(packet.type == OK) break;
 
         if(++iter>=5) error("Error CRC: START");
+        
     }
 }
 
