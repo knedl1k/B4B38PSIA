@@ -23,7 +23,7 @@ make
 \
  local server:
 ```
-./send.bin 127.0.0.1 12345 file.txt 54321
+./send.bin 127.0.0.1 12345 file.txt
 ```
 > [!IMPORTANT]  
 > Do not send the file to the same folder it is in! Data corruption may occur.
