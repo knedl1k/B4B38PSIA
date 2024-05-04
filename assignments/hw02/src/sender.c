@@ -45,7 +45,9 @@ int main(int argc, char *argv[]){
         error("Error opening send socket");
     struct timeval timeout = {.tv_sec = 1, .tv_usec = 0};
     if(setsockopt(sockfd, SOL_SOCKET, SO_RCVTIMEO, &timeout, sizeof(timeout)) < 0)
-        error("setsockopt failed");
+        error("setsockopt RCV failed");
+    if(setsockopt(sockfd, SOL_SOCKET, SO_SNDTIMEO, &timeout, sizeof(timeout)) < 0)
+        error("setsockopt SND failed");
 
     struct sockaddr_in server_addr;
     socksInit(&server_addr, server_ip, server_port);
@@ -99,7 +101,6 @@ bool sendString(const int sockfd, const struct sockaddr_in server_addr, myPacket
            0,(struct sockaddr *) &server_addr, &server_len)==-1){
             if(errno == EAGAIN && errno == EWOULDBLOCK)
                 fprintf(stderr,"INFO: did not receive ACK!\n");
-
         }
 
             if(packet.type == OK) break;
