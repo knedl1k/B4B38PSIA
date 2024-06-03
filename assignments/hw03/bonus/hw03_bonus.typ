@@ -1,4 +1,4 @@
-#import "@preview/codelst:2.0.0": sourcecode
+#import "@preview/cetz:0.2.2": canvas, plot
 
 #set par(justify: true)
 #set text(
@@ -79,22 +79,41 @@ Toto je výsledná velikost okna v bitech pro dané zpoždění.
 === Nastavení testu
 Pro testování vlivu velikosti vysílacího okna na datovou propustnost budeme používat program NetDerper. Simulujeme různé hodnoty zpoždění a velikostí oken, přičemž sledujeme dosaženou datovou propustnost.
 
-=== Průběh testování
-1. Nastavíme simulované zpoždění mezi koncovými uzly.
-2. Ověříme minimální velikost vysílacího okna pro dané zpoždění pomocí výše uvedeného výpočtu.
-3. Postupně zvyšujeme velikost vysílacího okna a zaznamenáváme dosaženou datovou propustnost.
-4. Analyzujeme výsledky a ukážeme, že další zvyšování velikosti okna již nemá vliv na dosaženou datovou propustnost.
+=== Testovací nastavení
+Testovali jsme odesílání souboru velikosti 255 kB. Přenos bez chyb potřebuje 258 paketů (255 s daty souboru a další tři na název a velikost, ukončení komunikace a hash). Nastavení pro komunikaci bylo následující: timeout u odesílatele byl nastaven na 0,2 s, míra chyb (error rate) a ztrátovost paketů (drop rate) v obou směrech byla nastavena na 5 %.
 
-=== Ukázka komunikace ve Wiresharku
-Pro každou testovanou konfiguraci zaznamenáme průběh komunikace pomocí programu Wireshark. To nám umožní vizualizovat potvrzovací mechanismus protokolu Selective Repeat a identifikovat případné chyby či opakovaná přenosy.
+Zpoždění simulované programem NetDerper bylo následující:
+- Posílání dat: *Mean*: 100.0 ms, *StdDev*: 15.0 ms
+- Posílání potvrzení (ACK): *Mean*: 101.0 ms, *StdDev*: 16.0 ms
 
-\noindent{} Na obrázku níže je příklad zachyceného přenosu ve Wiresharku:
-/*#figure(
-  image("wireshark.png", width: 80%, fit: "stretch"),
-  caption: [Ukázka zachyceného přenosu ve Wiresharku],
+Poznámka: *Mean* určuje základní hodnotu zpoždění (střední hodnotu, protože jednotlivé pakety se liší) v milisekundách, *StdDev* značí maximální odchylku od střední hodnoty v milisekundách.
+
+=== Metodologie
+Velikost vysílacího okna jsme měnili od 5 do 125, zvyšovali jsme po 5. U každé velikosti jsme odebrali dva časy, a od velikosti okna 65 jsme začali odebírat čtyři časy, které jsme následně zprůměrovali. Přibližně od velikosti okna 70 už zvětšování okna nemělo žádný efekt na dosaženou datovou propustnost.
+
+#figure(
+  canvas(length: 1cm,{
+    plot.plot(
+      size: (14, 8),
+      x-tick-step: 25,
+      y-tick-step: 2.5,
+      x-max: 125,
+      y-max: 25,
+      x-min: 0,
+      y-min: 0,
+      x-grid: true,
+      y-grid: true,
+      x-label: "velikost okna /počet packetů",
+      y-label: "potřebný čas /s",
+      label:"ahoj",
+      {
+      plot.add(((5,24), (10,14), (15,12), (20, 11), (25, 9), (30, 8), (35, 7), (40, 6), (45, 5),(50, 4.9),(55,4.5), (60, 4), (65, 3.5), (70,3.5), (75,3.5), (80,3.5), (85,3.5), (90,3.5), (95,3.5), (100,3.5), (105,3.5), (110,3.5), (115,3.5), (120,3.5), (125,3.5)), mark:"o",line:"spline")
+        
+      }
+    )
+  }), 
+  caption: "Závislost rychlosti přenosu na velikosti sliding window"
 )
-*/
-TODO
-== Závěr
-Na základě výsledků našich testů pomocí NetDerperu a analýzy komunikace ve Wiresharku lze demonstrovat, že po dosažení optimální velikosti vysílacího okna (pro dané zpoždění a šířku pásma) další zvyšování této velikosti již nevede k nárůstu datové propustnosti. Tento závěr je důležitý pro efektivní konfiguraci síťových protokolů v prostředích s různými hodnotami zpoždění.
 
+== Závěr
+Na základě výsledků testování jsme zjistili, že po dosažení velikosti vysílacího okna kolem 70 paketů již další zvětšování okna nemělo žádný vliv na zlepšení datové propustnosti. Tento závěr je důležitý pro efektivní nastavení síťových protokolů v prostředích s podobnými parametry zpoždění a chybovosti.
